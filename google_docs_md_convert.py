@@ -1,14 +1,17 @@
-
 from google.colab import auth
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+
 
 
 def authenticate():
+    # Authenticate the user with Google Colab's built-in method
     auth.authenticate_user()
-    creds, _ = Credentials.from_authorized_user_info({})
-    return build('docs', 'v1', credentials=creds)
+    # Build the Google Docs service
+    service = build('docs', 'v1')
+    return service
 
 def create_google_doc(service, title):
     doc = service.documents().create(body={"title": title}).execute()
@@ -17,107 +20,93 @@ def create_google_doc(service, title):
 
 def format_doc(service, doc_id, markdown):
     requests = []
+    current_index = 1  # Start at index 1 since 0 is reserved for the beginning of the document
 
+    # Split markdown into sections
     lines = markdown.split("\n")
     for line in lines:
-        if line.startswith("# "):
+        if line.startswith("# "):  # Heading 1
             requests.append({
                 'insertText': {
-                    'location': {
-                        'index': 1,
-                    },
+                    'location': {'index': current_index},
                     'text': line[2:] + "\n"
                 }
             })
             requests.append({
                 'updateParagraphStyle': {
                     'range': {
-                        'startIndex': 1,
-                        'endIndex': len(line) + 2,
+                        'startIndex': current_index,
+                        'endIndex': current_index + len(line[2:]) + 1,
                     },
-                    'paragraphStyle': {
-                        'namedStyleType': 'HEADING_1',
-                    },
+                    'paragraphStyle': {'namedStyleType': 'HEADING_1'},
                     'fields': 'namedStyleType',
                 }
             })
-        elif line.startswith("## "):
+            current_index += len(line[2:]) + 1
+        elif line.startswith("## "):  # Heading 2
             requests.append({
                 'insertText': {
-                    'location': {
-                        'index': 1,
-                    },
+                    'location': {'index': current_index},
                     'text': line[3:] + "\n"
                 }
             })
             requests.append({
                 'updateParagraphStyle': {
                     'range': {
-                        'startIndex': 1,
-                        'endIndex': len(line) + 2,
+                        'startIndex': current_index,
+                        'endIndex': current_index + len(line[3:]) + 1,
                     },
-                    'paragraphStyle': {
-                        'namedStyleType': 'HEADING_2',
-                    },
+                    'paragraphStyle': {'namedStyleType': 'HEADING_2'},
                     'fields': 'namedStyleType',
                 }
             })
-        elif line.startswith("### "):
+            current_index += len(line[3:]) + 1
+        elif line.startswith("### "):  # Heading 3
             requests.append({
                 'insertText': {
-                    'location': {
-                        'index': 1,
-                    },
+                    'location': {'index': current_index},
                     'text': line[4:] + "\n"
                 }
             })
             requests.append({
                 'updateParagraphStyle': {
                     'range': {
-                        'startIndex': 1,
-                        'endIndex': len(line) + 2,
+                        'startIndex': current_index,
+                        'endIndex': current_index + len(line[4:]) + 1,
                     },
-                    'paragraphStyle': {
-                        'namedStyleType': 'HEADING_3',
-                    },
+                    'paragraphStyle': {'namedStyleType': 'HEADING_3'},
                     'fields': 'namedStyleType',
                 }
             })
-        elif line.startswith("- [ ] "):
+            current_index += len(line[4:]) + 1
+        elif line.startswith("- [ ] "):  # Unchecked checkbox
+            checkbox_text = "☐ " + line[6:] + "\n"
             requests.append({
                 'insertText': {
-                    'location': {
-                        'index': 1,
-                    },
-                    'text': line[6:] + "\n"
+                    'location': {'index': current_index},
+                    'text': checkbox_text
                 }
             })
-            requests.append({
-                'insertInlineObject': {
-                    'location': {
-                        'index': 1,
-                    },
-                    'inlineObjectProperties': {
-                        'embeddedObject': {
-                            'embeddedDrawingProperties': {
-                                'checkbox': {
-                                    'checked': False
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-        else:
+            current_index += len(checkbox_text)
+        elif line.startswith("- [x] "):  # Checked checkbox
+            checkbox_text = "☑ " + line[6:] + "\n"
             requests.append({
                 'insertText': {
-                    'location': {
-                        'index': 1,
-                    },
+                    'location': {'index': current_index},
+                    'text': checkbox_text
+                }
+            })
+            current_index += len(checkbox_text)
+        else:  # Regular text
+            requests.append({
+                'insertText': {
+                    'location': {'index': current_index},
                     'text': line + "\n"
                 }
             })
+            current_index += len(line) + 1
 
+    # Execute the batch update
     try:
         service.documents().batchUpdate(
             documentId=doc_id,
@@ -126,6 +115,8 @@ def format_doc(service, doc_id, markdown):
         print("Document formatted successfully.")
     except HttpError as error:
         print(f"An error occurred: {error}")
+
+
 
 # Main function, left notes as one big string, probably not write and should import the notes....
 def main():
